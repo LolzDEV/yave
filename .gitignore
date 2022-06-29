@@ -1,0 +1,6 @@
+# Builds
+target/
+
+# Editors
+.idea/
+.vscode/
