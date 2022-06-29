@@ -1,0 +1,15 @@
+vertex_module = "base:world"
+fragment_module = "base:world"
+
+vertex_entry = "vs_main"
+fragment_entry = "fs_main"
+
+samples = 1
+
+[primitive]
+topology = "triangle_list"
+front_face = "ccw"
+cull_mode = "back"
+polygon_mode = "fill"
+unclipped_depth = false
+conservative = false

@@ -1,16 +1,18 @@
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Error, Formatter};
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
-use bevy_ecs::system::ResMut;
-use log::info;
-use wgpu::{ShaderModule, ShaderSource};
-use crate::client::renderer::Renderer;
+use std::str::FromStr;
+use log::{error, info};
+use wgpu::{Face, FragmentState, FrontFace, MultisampleState, PolygonMode, PrimitiveState, PrimitiveTopology, ShaderModule, ShaderSource, VertexState};
+use crate::client::renderer::{Renderer, RenderPipelineDescription};
 
+/// An identifier is a structure used to identify objects in game like entities, textures, shaders and everything else
 #[derive(Debug, Clone, PartialEq)]
 pub struct Identifier {
+    /// The identifier namespace e.g. in base:world the namespace is "base"
     namespace: String,
+    /// The identifier name e.g. in base:world the namespace is "world"
     name: String,
 }
 
@@ -38,8 +40,18 @@ impl Display for Identifier {
     }
 }
 
+impl FromStr for Identifier {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let split: Vec<&str> = s.split(":").collect();
+        Ok(Identifier::new(split.get(0).unwrap(), split.get(1).unwrap()))
+    }
+}
+
 /// The asset manager holds game assets like textures, shaders, models and so on
 pub struct AssetManager {
+    /// All the shaders beign loaded at startup
     shaders: HashMap<Identifier, ShaderModule>
 }
 
@@ -63,6 +75,81 @@ impl AssetManager {
 
                 shaders.insert(id, shader);
             }
+
+            for pipeline in fs::read_dir(namespace.path().join("pipelines")).unwrap() {
+                let pipeline = pipeline.unwrap();
+                let name = pipeline.file_name().into_string().unwrap().replace(&format!(".{}", pipeline.path().extension().unwrap().to_str().unwrap()), "");
+                let id = Identifier::new(namespace.file_name().to_str().unwrap(), &name);
+
+                info!("Loading pipeline {}", id);
+
+                let description: Result<RenderPipelineDescription, toml::de::Error> = toml::from_str(&fs::read_to_string(pipeline.path()).unwrap());
+
+                match description {
+                    Ok(desc) => {
+                        let pipeline_layout = renderer.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                            label: Some(&id.to_string()),
+                            bind_group_layouts: &[],
+                            push_constant_ranges: &[]
+                        });
+
+                        let render_pipeline = renderer.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                            label: Some(&id.to_string()),
+                            layout: Some(&pipeline_layout),
+                            vertex: VertexState {
+                                module: shaders.get(&Identifier::from_str(&desc.vertex_module).unwrap()).unwrap(),
+                                entry_point: &desc.vertex_entry,
+                                buffers: &[]
+                            },
+                            primitive: PrimitiveState {
+                                topology: match desc.primitive.topology.as_str() {
+                                    "triangle_list" => PrimitiveTopology::TriangleList,
+                                    "line_list" => PrimitiveTopology::LineList,
+                                    "point_list" => PrimitiveTopology::PointList,
+                                    "line_strip" => PrimitiveTopology::LineStrip,
+                                    _ => PrimitiveTopology::default(),
+                                },
+                                strip_index_format: None,
+                                front_face: match desc.primitive.front_face.as_str() {
+                                    "cw" => FrontFace::Cw,
+                                    "ccw" => FrontFace::Ccw,
+                                    _ => FrontFace::default(),
+                                },
+                                cull_mode: if let Some(cull_mode) = desc.primitive.cull_mode { match cull_mode.as_str() {
+                                    "back" => Some(Face::Back),
+                                    "front" => Some(Face::Front),
+                                    _ => None
+                                } } else { None },
+                                unclipped_depth: desc.primitive.unclipped_depth,
+                                polygon_mode: match desc.primitive.polygon_mode.as_str() {
+                                    "fill" => PolygonMode::Fill,
+                                    "point" => PolygonMode::Point,
+                                    "line" => PolygonMode::Line,
+                                    _ => PolygonMode::default(),
+                                },
+                                conservative: desc.primitive.conservative
+                            },
+                            depth_stencil: None,
+                            multisample: MultisampleState {
+                                count: desc.samples,
+                                mask: !0,
+                                alpha_to_coverage_enabled: false
+                            },
+                            fragment: Some(FragmentState {
+                                module: shaders.get(&Identifier::from_str(&desc.fragment_module).unwrap()).unwrap(),
+                                entry_point: &desc.fragment_entry,
+                                targets: &[wgpu::ColorTargetState {
+                                    format: renderer.surface_config.format,
+                                    blend: Some(wgpu::BlendState::REPLACE),
+                                    write_mask: wgpu::ColorWrites::ALL
+                                }]
+                            }),
+                            multiview: None
+                        });
+                    }
+                    Err(e) => error!("Cannot create pipeline with id {id}: {e}"),
+                }
+            }
         }
 
         Self {
@@ -70,6 +157,7 @@ impl AssetManager {
         }
     }
 
+    /// Get a shader module from its id
     pub fn get_shader(&self, id: Identifier) -> Option<&ShaderModule> {
         self.shaders.get(&id)
     }

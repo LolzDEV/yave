@@ -2128,7 +2128,10 @@ dependencies = [
  "image",
  "log",
  "pollster",
+ "serde",
+ "serde_derive",
  "thunderdome",
+ "toml",
  "wgpu",
  "winit",
 ]

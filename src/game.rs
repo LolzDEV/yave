@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use bevy_ecs::prelude::{Schedule, SystemStage};
 use bevy_ecs::schedule::Stage;
 use bevy_ecs::world::World;
@@ -15,9 +16,10 @@ impl Game {
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new().with_title("yave").build(&event_loop)?;
 
-        let mut schedule = Schedule::default();
+        let mut main_schedule = Schedule::default();
 
-        schedule.add_stage("main_loop", SystemStage::parallel());
+        main_schedule.add_stage("main_loop", SystemStage::parallel());
+        main_schedule.add_stage("render_loop", SystemStage::parallel());
 
         let mut world = World::new();
         world.insert_resource(window);
@@ -31,16 +33,21 @@ impl Game {
         world.insert_resource(assets);
 
         event_loop.run(move |e, _, control_flow| {
-            schedule.run(&mut world);
             *control_flow = ControlFlow::Poll;
+            let window = world.get_resource::<Window>().unwrap();
 
             match e {
                 Event::WindowEvent { window_id, event} => {
-                    let window = world.get_resource::<Window>().unwrap();
 
                     if window_id == window.id() {
                         match event {
-                            WindowEvent::Resized(new_size) => {}
+                            WindowEvent::Resized(new_size) => {
+                                let mut renderer = world.get_resource_mut::<Renderer>().unwrap();
+                                renderer.surface_config.width = new_size.width;
+                                renderer.surface_config.height = new_size.height;
+
+                                renderer.surface.configure(&renderer.device, &renderer.surface_config);
+                            }
                             WindowEvent::CloseRequested => {
                                 *control_flow = ControlFlow::Exit;
                             }
@@ -50,8 +57,12 @@ impl Game {
                         }
                     }
                 }
-                Event::MainEventsCleared => {}
-                Event::RedrawRequested(_) => {}
+                Event::MainEventsCleared => {
+                    window.request_redraw();
+                }
+                Event::RedrawRequested(_) => {
+                    main_schedule.run(&mut world);
+                }
                 _ => ()
             }
         });
