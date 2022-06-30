@@ -1,0 +1,9 @@
+solid = true
+
+[texture]
+top = "base:stone"
+bottom = "base:stone"
+north = "base:stone"
+west = "base:stone"
+east = "base:stone"
+south = "base:stone"

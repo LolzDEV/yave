@@ -5,7 +5,8 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use log::{error, info};
 use wgpu::{Face, FragmentState, FrontFace, MultisampleState, PolygonMode, PrimitiveState, PrimitiveTopology, ShaderModule, ShaderSource, VertexState};
-use crate::client::renderer::{Renderer, RenderPipelineDescription};
+use crate::client::renderer::{PipelineBundle, Renderer, RenderPipelineDescription};
+use crate::client::voxel::{BlockDescription, VoxelVertex};
 
 /// An identifier is a structure used to identify objects in game like entities, textures, shaders and everything else
 #[derive(Debug, Clone, PartialEq)]
@@ -52,15 +53,36 @@ impl FromStr for Identifier {
 /// The asset manager holds game assets like textures, shaders, models and so on
 pub struct AssetManager {
     /// All the shaders beign loaded at startup
-    shaders: HashMap<Identifier, ShaderModule>
+    shaders: HashMap<Identifier, ShaderModule>,
+    /// All the pipelines beign loaded at startup
+    pipelines: HashMap<Identifier, PipelineBundle>
 }
 
 impl AssetManager {
     pub fn new(renderer: &Renderer) -> Self {
         let mut shaders = HashMap::new();
+        let mut pipelines = HashMap::new();
 
         for namespace in fs::read_dir("assets").unwrap() {
             let namespace = namespace.unwrap();
+
+            for block in fs::read_dir(namespace.path().join("blocks")).unwrap() {
+                let block = block.unwrap();
+                let name = block.file_name().into_string().unwrap().replace(&format!(".{}", block.path().extension().unwrap().to_str().unwrap()), "");
+                let id = Identifier::new(namespace.file_name().to_str().unwrap(), &name);
+
+                info!("Loading block {}", id);
+
+                let description: Result<BlockDescription, toml::de::Error> = toml::from_str(&fs::read_to_string(block.path()).unwrap());
+
+                match description {
+                    Ok(desc) => {
+
+                    }
+                    Err(e) => error!("Cannot create block with id {id}: {e}"),
+                }
+            }
+
             for shader in fs::read_dir(namespace.path().join("shaders")).unwrap() {
                 let shader = shader.unwrap();
                 let name = shader.file_name().into_string().unwrap().replace(&format!(".{}", shader.path().extension().unwrap().to_str().unwrap()), "");
@@ -99,7 +121,7 @@ impl AssetManager {
                             vertex: VertexState {
                                 module: shaders.get(&Identifier::from_str(&desc.vertex_module).unwrap()).unwrap(),
                                 entry_point: &desc.vertex_entry,
-                                buffers: &[]
+                                buffers: &[VoxelVertex::desc()]
                             },
                             primitive: PrimitiveState {
                                 topology: match desc.primitive.topology.as_str() {
@@ -146,6 +168,8 @@ impl AssetManager {
                             }),
                             multiview: None
                         });
+
+                        pipelines.insert(id, PipelineBundle { pipeline_layout, render_pipeline });
                     }
                     Err(e) => error!("Cannot create pipeline with id {id}: {e}"),
                 }
@@ -154,11 +178,16 @@ impl AssetManager {
 
         Self {
             shaders,
+            pipelines
         }
     }
 
     /// Get a shader module from its id
     pub fn get_shader(&self, id: Identifier) -> Option<&ShaderModule> {
         self.shaders.get(&id)
+    }
+
+    pub fn get_pipeline(&self, id: Identifier) -> Option<&PipelineBundle> {
+        self.pipelines.get(&id)
     }
 }

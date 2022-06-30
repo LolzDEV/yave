@@ -1,0 +1,9 @@
+solid = true
+
+[texture]
+top = "base:grass_block_top"
+bottom = "base:dirt"
+north = "base:grass_block_side"
+west = "base:grass_block_side"
+east = "base:grass_block_side"
+south = "base:grass_block_side"

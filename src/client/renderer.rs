@@ -1,8 +1,9 @@
 use pollster::block_on;
-use thunderdome::Arena;
-use wgpu::{Backends, Features, Instance, Limits, PowerPreference, PresentMode, SurfaceConfiguration, TextureUsages};
+use thunderdome::{Arena, Index};
+use wgpu::{Backends, BufferUsages, Features, Instance, Limits, PowerPreference, PresentMode, SurfaceConfiguration, TextureUsages};
 use winit::window::Window;
 use serde_derive::Deserialize;
+use wgpu::util::DeviceExt;
 
 /// Game renderer (wgpu)
 pub struct Renderer {
@@ -53,6 +54,14 @@ impl Renderer {
             arena,
             surface_config
         }
+    }
+
+    pub fn create_buffer(&mut self, data: &[u8], usage: BufferUsages) -> Index {
+        self.arena.insert(self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: data,
+            usage,
+        }))
     }
 }
 
