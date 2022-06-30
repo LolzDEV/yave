@@ -15,15 +15,15 @@ impl VoxelVertex {
     }
 
     pub fn x(&self) -> u32 {
-        self.data & 0xf800000
+        self.data >> 27
     }
 
     pub fn y(&self) -> u32 {
-        self.data & 0x7c00000
+        (self.data & 0x7c00000) >> 22
     }
 
     pub fn z(&self) -> u32 {
-        self.data & 0x3e0000
+        (self.data & 0x3e0000) >> 17
     }
 
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
