@@ -4,7 +4,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use log::{error, info};
-use wgpu::{Face, FragmentState, FrontFace, MultisampleState, PolygonMode, PrimitiveState, PrimitiveTopology, ShaderModule, ShaderSource, VertexState};
+use wgpu::{BindGroupLayout, BindGroupLayoutEntry, Face, FragmentState, FrontFace, MultisampleState, PolygonMode, PrimitiveState, PrimitiveTopology, ShaderModule, ShaderSource, VertexState};
 use crate::client::renderer::{PipelineBundle, Renderer, RenderPipelineDescription};
 use crate::client::voxel::{BlockDescription, VoxelVertex};
 
@@ -55,13 +55,36 @@ pub struct AssetManager {
     /// All the shaders beign loaded at startup
     shaders: HashMap<Identifier, ShaderModule>,
     /// All the pipelines beign loaded at startup
-    pipelines: HashMap<Identifier, PipelineBundle>
+    pipelines: HashMap<Identifier, PipelineBundle>,
+    /// All the bind group layouts beign created at startup
+    bind_group_layouts: HashMap<Identifier, BindGroupLayout>
 }
 
 impl AssetManager {
     pub fn new(renderer: &Renderer) -> Self {
         let mut shaders = HashMap::new();
         let mut pipelines = HashMap::new();
+        let mut bind_group_layouts = HashMap::new();
+
+        {
+            let id = Identifier::new("base", "camera");
+            info!("Creating {id} bind group layout");
+            let camera_bind_group = renderer.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("base:camera"),
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+            bind_group_layouts.insert(id, camera_bind_group);
+        }
 
         for namespace in fs::read_dir("assets").unwrap() {
             let namespace = namespace.unwrap();
@@ -71,7 +94,7 @@ impl AssetManager {
                 let name = block.file_name().into_string().unwrap().replace(&format!(".{}", block.path().extension().unwrap().to_str().unwrap()), "");
                 let id = Identifier::new(namespace.file_name().to_str().unwrap(), &name);
 
-                info!("Loading block {}", id);
+                info!("Loading block {id}");
 
                 let description: Result<BlockDescription, toml::de::Error> = toml::from_str(&fs::read_to_string(block.path()).unwrap());
 
@@ -88,7 +111,7 @@ impl AssetManager {
                 let name = shader.file_name().into_string().unwrap().replace(&format!(".{}", shader.path().extension().unwrap().to_str().unwrap()), "");
                 let id = Identifier::new(namespace.file_name().to_str().unwrap(), &name);
 
-                info!("Loading shader {}", id);
+                info!("Loading shader {id}");
 
                 let shader = renderer.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                     label: Some(&id.to_string()),
@@ -103,15 +126,16 @@ impl AssetManager {
                 let name = pipeline.file_name().into_string().unwrap().replace(&format!(".{}", pipeline.path().extension().unwrap().to_str().unwrap()), "");
                 let id = Identifier::new(namespace.file_name().to_str().unwrap(), &name);
 
-                info!("Loading pipeline {}", id);
+                info!("Loading pipeline {id}");
 
                 let description: Result<RenderPipelineDescription, toml::de::Error> = toml::from_str(&fs::read_to_string(pipeline.path()).unwrap());
 
                 match description {
                     Ok(desc) => {
+                        let bind_groups: Vec<&BindGroupLayout> = desc.layouts.iter().map(|g| bind_group_layouts.get(&Identifier::from_str(g.as_str()).unwrap()).unwrap()).collect();
                         let pipeline_layout = renderer.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                             label: Some(&id.to_string()),
-                            bind_group_layouts: &[],
+                            bind_group_layouts: bind_groups.as_slice(),
                             push_constant_ranges: &[]
                         });
 
@@ -178,7 +202,8 @@ impl AssetManager {
 
         Self {
             shaders,
-            pipelines
+            pipelines,
+            bind_group_layouts
         }
     }
 
@@ -187,7 +212,13 @@ impl AssetManager {
         self.shaders.get(&id)
     }
 
+    /// Get a render pipeline from its id
     pub fn get_pipeline(&self, id: Identifier) -> Option<&PipelineBundle> {
         self.pipelines.get(&id)
+    }
+
+    /// Get a bind group layout from its id
+    pub fn get_bind_group_layout(&self, id: Identifier) -> Option<&BindGroupLayout> {
+        self.bind_group_layouts.get(&id)
     }
 }

@@ -14,7 +14,9 @@ pub struct Renderer {
     /// A queue used to submit commands to the device
     pub queue: wgpu::Queue,
     /// An arena which holds buffers
-    pub arena: Arena<wgpu::Buffer>,
+    pub buffers: Arena<wgpu::Buffer>,
+    /// An arena which holds bind_groups
+    pub bind_groups: Arena<wgpu::BindGroup>,
     /// The surface configuration
     pub surface_config: wgpu::SurfaceConfiguration,
 }
@@ -45,23 +47,33 @@ impl Renderer {
 
         surface.configure(&device, &surface_config);
 
-        let arena = Arena::new();
+        let buffers = Arena::new();
+        let bind_groups = Arena::new();
 
         Self {
             surface,
             device,
             queue,
-            arena,
+            buffers,
+            bind_groups,
             surface_config
         }
     }
 
     pub fn create_buffer(&mut self, data: &[u8], usage: BufferUsages) -> Index {
-        self.arena.insert(self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        self.buffers.insert(self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: data,
             usage,
         }))
+    }
+
+    pub fn create_bind_group(&mut self, desc: &wgpu::BindGroupDescriptor) -> Index {
+        self.bind_groups.insert(self.device.create_bind_group(desc))
+    }
+
+    pub fn get_buffer(&self, index: Index) -> &wgpu::Buffer {
+        &self.buffers[index]
     }
 }
 
@@ -73,6 +85,7 @@ pub struct RenderPipelineDescription {
     pub fragment_entry: String,
     pub primitive: RenderPipelinePrimitive,
     pub samples: u32,
+    pub layouts: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
