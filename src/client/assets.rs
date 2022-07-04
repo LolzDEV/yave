@@ -31,6 +31,7 @@ impl Identifier {
 
 impl Eq for Identifier {}
 
+#[allow(clippy::derive_hash_xor_eq)]
 impl Hash for Identifier {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.namespace.hash(state);
@@ -112,7 +113,7 @@ impl AssetManager {
                     toml::from_str(&fs::read_to_string(block.path()).unwrap());
 
                 match description {
-                    Ok(desc) => {}
+                    Ok(_desc) => {}
                     Err(e) => error!("Cannot create block with id {id}: {e}"),
                 }
             }

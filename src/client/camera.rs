@@ -1,8 +1,8 @@
-use cgmath::{perspective, InnerSpace, Matrix4, Point3, Rad, SquareMatrix, Vector3, Deg};
+use cgmath::{perspective, Deg, InnerSpace, Matrix4, Point3, Rad, SquareMatrix, Vector3};
 use thunderdome::Index;
-use winit::event::{VirtualKeyCode, ElementState};
+use winit::event::{ElementState, VirtualKeyCode};
 
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 1.0,
 );
 
@@ -15,9 +15,9 @@ pub struct Camera {
 
 impl Camera {
     pub fn new<P, Y>(position: P, yaw: Y, pitch: Y) -> Self
-        where
-            P: Into<Point3<f32>>,
-            Y: Into<Rad<f32>>,
+    where
+        P: Into<Point3<f32>>,
+        Y: Into<Rad<f32>>,
     {
         Self {
             position: position.into(),
@@ -45,8 +45,8 @@ pub struct Projection {
 
 impl Projection {
     pub fn new<T>(width: f32, height: f32, fov: T, znear: f32, zfar: f32) -> Self
-        where
-            T: Into<Rad<f32>>,
+    where
+        T: Into<Rad<f32>>,
     {
         Self {
             aspect: width / height,
@@ -83,6 +83,12 @@ impl CameraUniform {
     }
 }
 
+impl Default for CameraUniform {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct CameraController {
     amount_left: f32,
@@ -114,7 +120,11 @@ impl CameraController {
     }
 
     pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) {
-        let amount = if let ElementState::Pressed = state { 1. } else { 0. };
+        let amount = if let ElementState::Pressed = state {
+            1.
+        } else {
+            0.
+        };
         match key {
             VirtualKeyCode::W => self.amount_forward = amount,
             VirtualKeyCode::A => self.amount_left = amount,
@@ -122,7 +132,7 @@ impl CameraController {
             VirtualKeyCode::D => self.amount_right = amount,
             VirtualKeyCode::Space => self.amount_up = amount,
             VirtualKeyCode::LShift => self.amount_down = amount,
-            _ => ()
+            _ => (),
         }
     }
 
@@ -160,7 +170,6 @@ impl CameraController {
 #[derive(Debug, Clone, Copy)]
 pub struct CameraBundle {
     pub camera: Camera,
-    pub camera_controller: CameraController,
     pub camera_uniform: CameraUniform,
     pub projection: Projection,
     pub buffer: Index,

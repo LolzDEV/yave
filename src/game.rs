@@ -3,14 +3,17 @@ use crate::client::camera::{Camera, CameraBundle, CameraController, CameraUnifor
 use crate::client::chunk::ChunkMesh;
 use crate::client::renderer::Renderer;
 use crate::client::voxel::VoxelVertex;
+use crate::{DeltaTime, KeyboardEvent, MouseMotion};
+use bevy_ecs::event::{EventReader, Events};
 use bevy_ecs::prelude::{Commands, ResMut, Schedule, SystemStage};
 use bevy_ecs::schedule::Stage;
 use bevy_ecs::system::Res;
 use bevy_ecs::world::World;
 use cgmath::Deg;
+use std::time::{Duration, Instant};
 use wgpu::{BufferUsages, IndexFormat, SurfaceError};
 use winit::error::OsError;
-use winit::event::{Event, WindowEvent};
+use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
 
@@ -25,14 +28,30 @@ impl Game {
 
         let mut setup_schedule = Schedule::default();
 
+        let mut world = World::new();
+
+        world.insert_resource(Events::<KeyboardEvent>::default());
+        world.insert_resource(Events::<MouseMotion>::default());
+
         setup_schedule.add_stage("setup", SystemStage::parallel().with_system(Game::setup));
-        main_schedule.add_stage("main_loop", SystemStage::parallel());
+        main_schedule.add_stage(
+            "events",
+            SystemStage::parallel()
+                .with_system(Events::<KeyboardEvent>::update_system)
+                .with_system(Events::<MouseMotion>::update_system),
+        );
+        main_schedule.add_stage(
+            "main_loop",
+            SystemStage::parallel()
+                .with_system(Game::update)
+                .with_system(Game::handle_keyboard)
+                .with_system(Game::handle_mouse),
+        );
         main_schedule.add_stage(
             "render_loop",
             SystemStage::parallel().with_system(Game::render),
         );
 
-        let mut world = World::new();
         world.insert_resource(window);
 
         let renderer = Renderer::new(world.get_resource::<Window>().unwrap());
@@ -43,7 +62,11 @@ impl Game {
 
         world.insert_resource(assets);
 
+        world.insert_resource(DeltaTime(Duration::from_secs_f32(0.0)));
+
         setup_schedule.run(&mut world);
+
+        let mut last_frame_time = Instant::now();
 
         event_loop.run(move |e, _, control_flow| {
             *control_flow = ControlFlow::Poll;
@@ -65,16 +88,42 @@ impl Game {
                             WindowEvent::CloseRequested => {
                                 *control_flow = ControlFlow::Exit;
                             }
-                            WindowEvent::KeyboardInput { .. } => {}
-                            WindowEvent::MouseInput { .. } => {}
+                            WindowEvent::KeyboardInput { input, .. } => {
+                                let mut window_events =
+                                    world.get_resource_mut::<Events<KeyboardEvent>>().unwrap();
+                                window_events.send(KeyboardEvent { input });
+                                if let KeyboardInput {
+                                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                                    state: ElementState::Released,
+                                    ..
+                                } = input
+                                {
+                                    *control_flow = ControlFlow::Exit;
+                                }
+                            }
+                            WindowEvent::Focused(is) => {
+                                window.set_cursor_grab(is).expect("Failed to grub cursor");
+                                window.set_cursor_visible(!is);
+                            }
                             _ => (),
                         }
                     }
                 }
+                Event::DeviceEvent { event, .. } => match event {
+                    DeviceEvent::MouseMotion { delta } => {
+                        let mut mouse_events =
+                            world.get_resource_mut::<Events<MouseMotion>>().unwrap();
+                        mouse_events.send(MouseMotion { delta });
+                    }
+                    _ => (),
+                },
                 Event::MainEventsCleared => {
                     window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
+                    let delta_time = Instant::now() - last_frame_time;
+                    last_frame_time = Instant::now();
+                    world.insert_resource(DeltaTime(delta_time));
                     main_schedule.run(&mut world);
                 }
                 _ => (),
@@ -88,7 +137,7 @@ impl Game {
         assets: Res<AssetManager>,
         window: Res<Window>,
     ) {
-        let camera = Camera::new((0., 0., -1.), Deg(-90.), Deg(-20.));
+        let camera = Camera::new((0., 0., 10.), Deg(-90.), Deg(-20.));
         let projection = Projection::new(
             window.inner_size().width as f32,
             window.inner_size().height as f32,
@@ -125,7 +174,6 @@ impl Game {
 
         let camera_bundle = CameraBundle {
             camera,
-            camera_controller: CameraController::new(0.1, 0.004),
             camera_uniform,
             buffer: camera_buffer,
             bind_group,
@@ -133,6 +181,53 @@ impl Game {
         };
 
         commands.insert_resource(camera_bundle);
+        commands.insert_resource(CameraController::new(2., 0.5));
+    }
+
+    pub fn update(
+        delta_time: Res<DeltaTime>,
+        mut camera_bundle: ResMut<CameraBundle>,
+        mut camera_controller: ResMut<CameraController>,
+        renderer: Res<Renderer>,
+    ) {
+        camera_controller.update_camera(&mut camera_bundle.camera, delta_time.0.as_secs_f32());
+
+        let bundle_clone = *camera_bundle;
+
+        camera_bundle
+            .camera_uniform
+            .update(bundle_clone.camera, bundle_clone.projection);
+
+        renderer.queue.write_buffer(
+            renderer.get_buffer(camera_bundle.buffer),
+            0,
+            bytemuck::cast_slice(&[camera_bundle.camera_uniform]),
+        );
+    }
+
+    pub fn handle_keyboard(
+        mut events: EventReader<KeyboardEvent>,
+        mut camera_controller: ResMut<CameraController>,
+    ) {
+        for event in events.iter() {
+            if let KeyboardInput {
+                virtual_keycode: Some(keycode),
+                state,
+                ..
+            } = event.input
+            {
+                camera_controller.process_keyboard(keycode, state);
+            }
+        }
+    }
+
+    pub fn handle_mouse(
+        mut events: EventReader<MouseMotion>,
+        mut camera_controller: ResMut<CameraController>,
+    ) {
+        for event in events.iter() {
+            camera_controller.process_mouse(event.delta.0, event.delta.1);
+        }
     }
 
     pub fn render(
