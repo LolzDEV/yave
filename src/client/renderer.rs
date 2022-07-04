@@ -1,9 +1,12 @@
 use pollster::block_on;
-use thunderdome::{Arena, Index};
-use wgpu::{Backends, BufferUsages, Features, Instance, Limits, PowerPreference, PresentMode, SurfaceConfiguration, TextureUsages};
-use winit::window::Window;
 use serde_derive::Deserialize;
+use thunderdome::{Arena, Index};
 use wgpu::util::DeviceExt;
+use wgpu::{
+    Backends, BufferUsages, Features, Instance, Limits, PowerPreference, PresentMode,
+    SurfaceConfiguration, TextureUsages,
+};
+use winit::window::Window;
 
 /// Game renderer (wgpu)
 pub struct Renderer {
@@ -28,22 +31,27 @@ impl Renderer {
         let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: PowerPreference::HighPerformance,
             force_fallback_adapter: false,
-            compatible_surface: Some(&surface)
-        })).unwrap();
+            compatible_surface: Some(&surface),
+        }))
+        .unwrap();
 
         let surface_config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_preferred_format(&adapter).unwrap(),
+            format: surface.get_supported_formats(&adapter)[0],
             width: window.inner_size().width,
             height: window.inner_size().height,
             present_mode: PresentMode::Fifo,
         };
 
-        let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("Device"),
-            features: Features::empty(),
-            limits: Limits::default(),
-        }, None)).unwrap();
+        let (device, queue) = block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("Device"),
+                features: Features::empty(),
+                limits: Limits::default(),
+            },
+            None,
+        ))
+        .unwrap();
 
         surface.configure(&device, &surface_config);
 
@@ -56,24 +64,31 @@ impl Renderer {
             queue,
             buffers,
             bind_groups,
-            surface_config
+            surface_config,
         }
     }
 
     pub fn create_buffer(&mut self, data: &[u8], usage: BufferUsages) -> Index {
-        self.buffers.insert(self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: data,
-            usage,
-        }))
+        self.buffers.insert(
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: data,
+                    usage,
+                }),
+        )
     }
 
-    pub fn create_bind_group(&mut self, desc: &wgpu::BindGroupDescriptor) -> Index {
-        self.bind_groups.insert(self.device.create_bind_group(desc))
+    pub fn insert_bind_group(&mut self, bind_group: wgpu::BindGroup) -> Index {
+        self.bind_groups.insert(bind_group)
     }
 
     pub fn get_buffer(&self, index: Index) -> &wgpu::Buffer {
         &self.buffers[index]
+    }
+
+    pub fn get_bind_group(&self, index: Index) -> &wgpu::BindGroup {
+        &self.bind_groups[index]
     }
 }
 
@@ -95,7 +110,7 @@ pub struct RenderPipelinePrimitive {
     pub cull_mode: Option<String>,
     pub polygon_mode: String,
     pub unclipped_depth: bool,
-    pub conservative: bool
+    pub conservative: bool,
 }
 
 #[derive(Debug)]

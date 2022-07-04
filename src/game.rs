@@ -8,10 +8,7 @@ use bevy_ecs::schedule::Stage;
 use bevy_ecs::system::Res;
 use bevy_ecs::world::World;
 use cgmath::Deg;
-use std::cell::Cell;
-use std::rc::Rc;
-use thunderdome::Arena;
-use wgpu::{BindGroupLayoutEntry, BufferUsages, IndexFormat, SurfaceError};
+use wgpu::{BufferUsages, IndexFormat, SurfaceError};
 use winit::error::OsError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -85,13 +82,13 @@ impl Game {
         });
     }
 
-    pub fn setup<'a>(
+    pub fn setup(
         mut commands: Commands,
         mut renderer: ResMut<Renderer>,
         assets: Res<AssetManager>,
         window: Res<Window>,
     ) {
-        let camera = Camera::new((0., 0., 0.), Deg(0.), Deg(0.));
+        let camera = Camera::new((0., 0., -1.), Deg(-90.), Deg(-20.));
         let projection = Projection::new(
             window.inner_size().width as f32,
             window.inner_size().height as f32,
@@ -111,20 +108,24 @@ impl Game {
 
         let buffer = renderer.get_buffer(camera_buffer);
 
-        let bind_group = renderer.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("base:camera"),
-            layout: assets
-                .get_bind_group_layout(Identifier::new("base", "camera"))
-                .unwrap(),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.clone().as_entire_binding(),
-            }],
-        });
+        let bind_group = renderer
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("base:camera"),
+                layout: assets
+                    .get_bind_group_layout(Identifier::new("base", "camera"))
+                    .unwrap(),
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            });
+
+        let bind_group = renderer.insert_bind_group(bind_group);
 
         let camera_bundle = CameraBundle {
             camera,
-            camera_controller: CameraController::new(0.5, 4.0),
+            camera_controller: CameraController::new(0.1, 0.004),
             camera_uniform,
             buffer: camera_buffer,
             bind_group,
@@ -134,7 +135,11 @@ impl Game {
         commands.insert_resource(camera_bundle);
     }
 
-    pub fn render(mut renderer: ResMut<Renderer>, assets: Res<AssetManager>) {
+    pub fn render(
+        mut renderer: ResMut<Renderer>,
+        assets: Res<AssetManager>,
+        camera_bundle: Res<CameraBundle>,
+    ) {
         let output = renderer.surface.get_current_texture();
 
         match output {
@@ -168,7 +173,7 @@ impl Game {
 
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
-                    color_attachments: &[wgpu::RenderPassColorAttachment {
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -180,7 +185,7 @@ impl Game {
                             }),
                             store: true,
                         },
-                    }],
+                    })],
                     depth_stencil_attachment: None,
                 });
 
@@ -189,6 +194,11 @@ impl Game {
                     .unwrap();
 
                 render_pass.set_pipeline(&world_pipeline.render_pipeline);
+                render_pass.set_bind_group(
+                    0,
+                    renderer.get_bind_group(camera_bundle.bind_group),
+                    &[],
+                );
                 render_pass
                     .set_index_buffer(renderer.buffers[indices].slice(..), IndexFormat::Uint16);
                 render_pass.set_vertex_buffer(0, renderer.buffers[mesh.buffer].slice(..));
