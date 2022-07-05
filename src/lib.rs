@@ -1,8 +1,10 @@
 use std::time::Duration;
 use winit::event::KeyboardInput;
 
+pub mod assets;
 pub mod client;
-pub mod game;
+mod network;
+pub mod server;
 pub mod world;
 
 pub struct DeltaTime(Duration);

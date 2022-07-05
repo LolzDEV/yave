@@ -20,10 +20,18 @@ toml = "0.5.9"
 serde_derive = "1.0"
 serde = "1.0"
 bytemuck = { version = "1.9.1", features = ["derive"] }
+rayon = "1.5.3"
+bytes = "1.1.0"
+byteorder = "1.4.3"
+tokio = { version = "1.19.2", features = ["full"] }
 
 [dev-dependencies]
 criterion = "0.3.5"
 
 [[bench]]
-name = "voxel_vertex"
+name = "block"
+harness = false
+
+[[bench]]
+name = "chunk"
 harness = false

@@ -13,6 +13,13 @@ struct CameraUniform {
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
 
+struct TransformUniform {
+    transform: mat4x4<f32>,
+}
+
+@group(1) @binding(0)
+var<uniform> transform: TransformUniform;
+
 @vertex
 fn vs_main(
     data: VertexInput,
@@ -21,7 +28,7 @@ fn vs_main(
     let x = data.data >> 27u;
     let y = (data.data & 0x7c00000u) >> 22u;
     let z = (data.data & 0x3e0000u) >> 17u;
-    out.clip_position = camera.view_proj * vec4<f32>(f32(x), f32(y), f32(z), 1.0);
+    out.clip_position = camera.view_proj * transform.transform * vec4<f32>(f32(x), f32(y), f32(z), 1.0);
     return out;
 }
 

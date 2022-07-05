@@ -94,6 +94,27 @@ impl AssetManager {
                     });
 
             bind_group_layouts.insert(id, camera_bind_group);
+
+            let id = Identifier::new("base", "transform");
+            info!("Creating {id} bind group layout");
+            let transform_bind_group =
+                renderer
+                    .device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("base:transform"),
+                        entries: &[BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                    });
+
+            bind_group_layouts.insert(id, transform_bind_group);
         }
 
         for namespace in fs::read_dir("assets").unwrap() {

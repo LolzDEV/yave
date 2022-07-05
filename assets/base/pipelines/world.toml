@@ -6,7 +6,7 @@ fragment_entry = "fs_main"
 
 samples = 1
 
-layouts = ["base:camera"]
+layouts = ["base:camera", "base:transform"]
 
 [primitive]
 topology = "triangle_list"
