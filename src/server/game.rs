@@ -181,7 +181,7 @@ impl Game {
         for (i, chunk) in chunks.chunks.iter().enumerate() {
             let mut unload = true;
             for (_player, position, _connection) in players.iter() {
-                if position.x as i64 / 16 == chunk.x || position.z as i64 / 16 == chunk.y {
+                if position.x as i64 / 16 == chunk.x && position.z as i64 / 16 == chunk.y {
                     unload = false;
                 }
 

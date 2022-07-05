@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use bevy_ecs::prelude::Component;
-use log::info;
 
 use crate::assets::Identifier;
 

@@ -79,7 +79,7 @@ impl ChunkMesh {
 
             if x == 15 {
                 vertices.append(
-                    &mut BlockFace::new(Direction::Top, x as u32, y as u32, z as u32)
+                    &mut BlockFace::new(Direction::East, x as u32, y as u32, z as u32)
                         .vertices
                         .to_vec(),
                 );
@@ -123,7 +123,7 @@ impl ChunkMesh {
 
             if z == 15 {
                 vertices.append(
-                    &mut BlockFace::new(Direction::Top, x as u32, y as u32, z as u32)
+                    &mut BlockFace::new(Direction::South, x as u32, y as u32, z as u32)
                         .vertices
                         .to_vec(),
                 );
