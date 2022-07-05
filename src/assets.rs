@@ -49,7 +49,7 @@ impl FromStr for Identifier {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let split: Vec<&str> = s.split(":").collect();
+        let split: Vec<&str> = s.split(':').collect();
         Ok(Identifier::new(
             split.get(0).unwrap(),
             split.get(1).unwrap(),

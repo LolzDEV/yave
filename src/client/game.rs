@@ -1,5 +1,5 @@
 use crate::assets::{AssetManager, Identifier};
-use crate::client::camera::{Camera, CameraBundle, CameraController, CameraUniform, Projection};
+use crate::client::camera::{CameraBundle, CameraController};
 use crate::client::chunk::ChunkMesh;
 use crate::client::player::{Player, PlayerController};
 use crate::client::renderer::Renderer;
@@ -7,7 +7,7 @@ use crate::client::transform::TransformBundle;
 use crate::client::voxel::VoxelVertex;
 use crate::client::ServerEvent;
 use crate::network::Packet;
-use crate::server::{split_socket, SocketSender};
+use crate::network::{split_socket, SocketSender};
 use crate::world::chunk::Chunk;
 use crate::{DeltaTime, KeyboardEvent, MouseMotion};
 use bevy_ecs::event::{EventReader, Events};
@@ -15,9 +15,7 @@ use bevy_ecs::prelude::{Commands, Query, ResMut, Schedule, SystemStage};
 use bevy_ecs::schedule::Stage;
 use bevy_ecs::system::Res;
 use bevy_ecs::world::World;
-use cgmath::Deg;
-use log::info;
-use pollster::block_on;
+use log::{error, info};
 use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -94,8 +92,6 @@ impl Game {
 
         setup_schedule.run(&mut world.lock().unwrap());
 
-        let mut last_frame_time = Instant::now();
-
         let world_clone = world.clone();
 
         let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
@@ -106,15 +102,7 @@ impl Game {
 
         info!("Connecting");
 
-        sender
-            .send(
-                Packet::Connection { user: username }
-                    .encode()
-                    .unwrap()
-                    .as_slice(),
-            )
-            .await
-            .unwrap();
+        sender.send(Packet::Connection { user: username }).unwrap();
 
         world.lock().unwrap().insert_resource(sender);
 
@@ -124,7 +112,7 @@ impl Game {
 
             loop {
                 let mut data = vec![0u8; std::mem::size_of::<Packet>()];
-                if let Ok((size, _peer)) = receiver.recv_from(&mut data).await {
+                if let Ok((size, _peer)) = receiver.recv_from(&mut data) {
                     data.resize(size, 0);
                     if let Ok(packet) = Packet::decode(data) {
                         let mut world = world.lock().unwrap();
@@ -135,6 +123,8 @@ impl Game {
                 }
             }
         });
+
+        let mut last_frame_time = Instant::now();
 
         event_loop.run(move |e, _, control_flow| {
             *control_flow = ControlFlow::Poll;
@@ -173,22 +163,23 @@ impl Game {
                             }
                             WindowEvent::Focused(is) => {
                                 let window = world.get_resource_mut::<Window>().unwrap();
-                                window.set_cursor_grab(is);
+                                if let Err(e) = window.set_cursor_grab(is) {
+                                    error!("{e}");
+                                }
                                 window.set_cursor_visible(!is);
                             }
                             _ => (),
                         }
                     }
                 }
-                Event::DeviceEvent { event, .. } => match event {
-                    DeviceEvent::MouseMotion { delta } => {
-                        let mut world = world.lock().unwrap();
-                        let mut mouse_events =
-                            world.get_resource_mut::<Events<MouseMotion>>().unwrap();
-                        mouse_events.send(MouseMotion { delta });
-                    }
-                    _ => (),
-                },
+                Event::DeviceEvent {
+                    event: DeviceEvent::MouseMotion { delta },
+                    ..
+                } => {
+                    let mut world = world.lock().unwrap();
+                    let mut mouse_events = world.get_resource_mut::<Events<MouseMotion>>().unwrap();
+                    mouse_events.send(MouseMotion { delta });
+                }
                 Event::MainEventsCleared => {
                     world
                         .lock()
@@ -214,50 +205,7 @@ impl Game {
         assets: Res<AssetManager>,
         window: Res<Window>,
     ) {
-        let camera = Camera::new((0., 0., 10.), Deg(-90.), Deg(-20.));
-        let projection = Projection::new(
-            window.inner_size().width as f32,
-            window.inner_size().height as f32,
-            Deg(45.),
-            0.1,
-            100.,
-        );
-
-        let mut camera_uniform = CameraUniform::new();
-
-        camera_uniform.update(camera, projection);
-
-        let camera_buffer = renderer.create_buffer(
-            bytemuck::cast_slice(&[camera_uniform]),
-            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        );
-
-        let buffer = renderer.get_buffer(camera_buffer);
-
-        let bind_group = renderer
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("base:camera"),
-                layout: assets
-                    .get_bind_group_layout(Identifier::new("base", "camera"))
-                    .unwrap(),
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                }],
-            });
-
-        let bind_group = renderer.insert_bind_group(bind_group);
-
-        let camera_bundle = CameraBundle {
-            camera,
-            camera_uniform,
-            buffer: camera_buffer,
-            bind_group,
-            projection,
-        };
-
-        commands.insert_resource(camera_bundle);
+        commands.insert_resource(CameraBundle::new(&window, &mut renderer, &assets));
         commands.insert_resource(CameraController::new(2., 0.5));
 
         commands.insert_resource(PlayerController::new(2., 0.5));
@@ -286,34 +234,22 @@ impl Game {
             bytemuck::cast_slice(&[camera_bundle.camera_uniform]),
         );
 
-        block_on(
-            sender.send(
-                Packet::Movement {
-                    delta_x: camera_bundle.camera.position.x as f64,
-                    delta_y: camera_bundle.camera.position.y as f64,
-                    delta_z: camera_bundle.camera.position.z as f64,
-                }
-                .encode()
-                .unwrap()
-                .as_slice(),
-            ),
-        )
-        .unwrap();
+        sender
+            .send(Packet::Movement {
+                delta_x: camera_bundle.camera.position.x as f64,
+                delta_y: camera_bundle.camera.position.y as f64,
+                delta_z: camera_bundle.camera.position.z as f64,
+            })
+            .unwrap();
 
         *player_controller = PlayerController::new(2., 0.5);
 
         for (player, mut transform_bundle) in players.iter_mut() {
-            block_on(
-                sender.send(
-                    Packet::PositionRequest {
-                        name: player.name.clone(),
-                    }
-                    .encode()
-                    .unwrap()
-                    .as_slice(),
-                ),
-            )
-            .unwrap();
+            sender
+                .send(Packet::PositionRequest {
+                    name: player.name.clone(),
+                })
+                .unwrap();
 
             let transform = transform_bundle.transform;
 
@@ -388,7 +324,7 @@ impl Game {
 
     pub fn handle_mouse(
         mut events: EventReader<MouseMotion>,
-        mut camera_controller: ResMut<CameraController>,
+        //mut camera_controller: ResMut<CameraController>,
         mut player_controller: ResMut<PlayerController>,
     ) {
         for event in events.iter() {

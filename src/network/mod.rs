@@ -1,6 +1,9 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use pollster::block_on;
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Write};
+use std::net::{SocketAddr, UdpSocket};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum Packet {
@@ -25,7 +28,17 @@ pub enum Packet {
     OnlinePlayers { players: Vec<OnlinePlayer> },
 }
 
+/// Structure used in the OnlinePlayers packet to store information about players.
+#[derive(Debug, Clone)]
+pub struct OnlinePlayer {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
 impl Packet {
+    /// Encode a packet into bytes to send it over the internet.
     pub fn encode(&self) -> io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
 
@@ -75,6 +88,7 @@ impl Packet {
         Ok(bytes)
     }
 
+    /// Decode a received packet from bytes.
     pub fn decode(data: Vec<u8>) -> io::Result<Self> {
         let mut cursor = Cursor::new(data);
         let id = cursor.read_u8()?;
@@ -140,10 +154,49 @@ impl Packet {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct OnlinePlayer {
-    pub name: String,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+/// SocketSender is used with a SocketReceiver to split a UdpSocket into two indipendent parts. This is generated in pair using the split_socket function
+pub struct SocketSender {
+    socket: Arc<tokio::net::UdpSocket>,
+}
+
+/// SocketReceiver is used with a SocketSender to split a UdpSocket into two indipendent parts. This is generated in pair using the split_socket function
+pub struct SocketReceiver {
+    socket: Arc<tokio::net::UdpSocket>,
+}
+
+impl SocketSender {
+    /// Send a packet to the specified socket.
+    pub fn send_to(&mut self, packet: Packet, addr: &SocketAddr) -> io::Result<()> {
+        block_on(self.socket.send_to(packet.encode()?.as_slice(), addr))?;
+        Ok(())
+    }
+
+    /// Send a packet to the connected socket.
+    pub fn send(&mut self, packet: Packet) -> io::Result<()> {
+        block_on(self.socket.send(packet.encode()?.as_slice()))?;
+        Ok(())
+    }
+}
+
+impl SocketReceiver {
+    pub fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+        block_on(self.socket.recv_from(buf))
+    }
+
+    #[allow(dead_code)]
+    pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        block_on(self.socket.recv(buf))
+    }
+}
+
+/// Split a UdpSocket into two indipendent parts, a sender and a receiver.
+pub fn split_socket(socket: UdpSocket) -> (SocketSender, SocketReceiver) {
+    let arc = Arc::new(tokio::net::UdpSocket::from_std(socket).unwrap());
+
+    (
+        SocketSender {
+            socket: arc.clone(),
+        },
+        SocketReceiver { socket: arc },
+    )
 }

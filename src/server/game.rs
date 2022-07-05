@@ -1,7 +1,5 @@
-use crate::network::{OnlinePlayer, Packet};
-use crate::server::{
-    split_socket, ClientEvent, Connection, Player, PlayerName, Position, SocketSender,
-};
+use crate::network::{split_socket, OnlinePlayer, Packet, SocketSender};
+use crate::server::{ClientEvent, Connection, Player, PlayerName, Position};
 use bevy_ecs::event::Events;
 use bevy_ecs::prelude::{Commands, EventReader, Query, Schedule, SystemStage, World};
 use bevy_ecs::schedule::Stage;
@@ -52,7 +50,7 @@ impl Game {
 
                 loop {
                     let mut data = vec![0u8; std::mem::size_of::<Packet>()];
-                    if let Ok((size, peer)) = receiver.recv_from(&mut data).await {
+                    if let Ok((size, peer)) = receiver.recv_from(&mut data) {
                         data.resize(size, 0);
                         if let Ok(packet) = Packet::decode(data) {
                             let mut world = world.lock().unwrap();
@@ -89,11 +87,9 @@ impl Game {
                 Packet::Connection { user } => {
                     let mut online_players = Vec::new();
                     for (player, position, connection) in players.iter() {
-                        block_on(sender.send_to(
-                            event.packet.clone().encode().unwrap().as_slice(),
-                            &connection.peer,
-                        ))
-                        .unwrap();
+                        sender
+                            .send_to(event.packet.clone(), &connection.peer)
+                            .unwrap();
 
                         online_players.push(OnlinePlayer {
                             name: player.name.name.clone(),
@@ -103,18 +99,14 @@ impl Game {
                         });
                     }
 
-                    block_on(
-                        sender.send_to(
+                    sender
+                        .send_to(
                             Packet::OnlinePlayers {
                                 players: online_players,
-                            }
-                            .encode()
-                            .unwrap()
-                            .as_slice(),
+                            },
                             &event.peer,
-                        ),
-                    )
-                    .unwrap();
+                        )
+                        .unwrap();
 
                     commands
                         .spawn()
@@ -146,21 +138,17 @@ impl Game {
                 Packet::PositionRequest { name } => {
                     for (player, position, _connection) in players.iter_mut() {
                         if player.name.name == name.clone() {
-                            block_on(
-                                sender.send_to(
+                            sender
+                                .send_to(
                                     Packet::PlayerPosition {
                                         x: position.x,
                                         y: position.y,
                                         z: position.z,
                                         name: name.clone(),
-                                    }
-                                    .encode()
-                                    .unwrap()
-                                    .as_slice(),
+                                    },
                                     &event.peer,
-                                ),
-                            )
-                            .unwrap();
+                                )
+                                .unwrap();
                         }
                     }
                 }

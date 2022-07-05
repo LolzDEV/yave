@@ -1,6 +1,10 @@
+use crate::assets::{AssetManager, Identifier};
+use crate::client::renderer::Renderer;
 use cgmath::{perspective, Deg, InnerSpace, Matrix4, Point3, Rad, SquareMatrix, Vector3};
 use thunderdome::Index;
+use wgpu::BufferUsages;
 use winit::event::{ElementState, VirtualKeyCode};
+use winit::window::Window;
 
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 1.0,
@@ -174,4 +178,51 @@ pub struct CameraBundle {
     pub projection: Projection,
     pub buffer: Index,
     pub bind_group: Index,
+}
+
+impl CameraBundle {
+    pub fn new(window: &Window, renderer: &mut Renderer, assets: &AssetManager) -> Self {
+        let camera = Camera::new((0., 0., 10.), Deg(-90.), Deg(-20.));
+        let projection = Projection::new(
+            window.inner_size().width as f32,
+            window.inner_size().height as f32,
+            Deg(45.),
+            0.1,
+            100.,
+        );
+
+        let mut camera_uniform = CameraUniform::new();
+
+        camera_uniform.update(camera, projection);
+
+        let camera_buffer = renderer.create_buffer(
+            bytemuck::cast_slice(&[camera_uniform]),
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        );
+
+        let buffer = renderer.get_buffer(camera_buffer);
+
+        let bind_group = renderer
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("base:camera"),
+                layout: assets
+                    .get_bind_group_layout(Identifier::new("base", "camera"))
+                    .unwrap(),
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            });
+
+        let bind_group = renderer.insert_bind_group(bind_group);
+
+        Self {
+            camera,
+            camera_uniform,
+            buffer: camera_buffer,
+            bind_group,
+            projection,
+        }
+    }
 }

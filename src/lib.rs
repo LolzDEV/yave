@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::time::Duration;
 use winit::event::KeyboardInput;
 
