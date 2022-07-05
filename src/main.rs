@@ -11,10 +11,12 @@ async fn main() -> Result<(), OsError> {
     let mut username = String::from("singleplayer");
     let mut dedicated = false;
     let mut port = String::from("25000");
+    let mut remote = false;
 
     for (i, arg) in args.iter().enumerate() {
         if arg == "--connect" {
             addr = args.get(i + 1).unwrap().clone();
+            remote = true;
         }
 
         if arg == "--username" {
@@ -33,10 +35,8 @@ async fn main() -> Result<(), OsError> {
     info!("Game starting");
 
     if !dedicated {
-        if args.len() < 2 {
+        if !remote {
             tokio::spawn(async move { yave::server::game::Game::run(port).unwrap() });
-        } else {
-            addr = args.get(1).unwrap().clone();
         }
 
         yave::client::game::Game::run(addr, username).await?;
