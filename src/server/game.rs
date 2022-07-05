@@ -1,5 +1,7 @@
 use crate::network::{split_socket, OnlinePlayer, Packet, SocketSender};
 use crate::server::{ClientEvent, Connection, Player, PlayerName, Position};
+use crate::world::Chunks;
+use crate::world::chunk::Chunk;
 use bevy_ecs::event::Events;
 use bevy_ecs::prelude::{Commands, EventReader, Query, Schedule, SystemStage, World};
 use bevy_ecs::schedule::Stage;
@@ -22,6 +24,10 @@ impl Game {
             .unwrap()
             .insert_resource(Events::<ClientEvent>::default());
 
+        let mut setup_schedule = Schedule::default();
+
+        setup_schedule.add_stage("setup", SystemStage::parallel().with_system(Game::setup));
+
         let mut main_schedule = Schedule::default();
 
         main_schedule.add_stage(
@@ -31,7 +37,7 @@ impl Game {
 
         main_schedule.add_stage(
             "main_loop",
-            SystemStage::parallel().with_system(Game::handle_packets),
+            SystemStage::parallel().with_system(Game::handle_packets).with_system(Game::update_chunks),
         );
 
         info!("Starting server on port 25000");
@@ -65,6 +71,8 @@ impl Game {
 
         let mut last_time = Instant::now();
 
+        setup_schedule.run(&mut world.lock().unwrap());
+
         loop {
             main_schedule.run(&mut world.lock().unwrap());
 
@@ -74,6 +82,10 @@ impl Game {
             }
             last_time = Instant::now();
         }
+    }
+
+    pub fn setup(mut commands: Commands) {
+        commands.insert_resource(Chunks::default());
     }
 
     pub fn handle_packets(
@@ -155,5 +167,50 @@ impl Game {
                 _ => (),
             }
         }
+    }
+
+    pub fn update_chunks(mut chunks: ResMut<Chunks>, players: Query<(&Player, &Position, &Connection)>, mut sender: ResMut<SocketSender>) {
+        let mut to_unload = vec![];
+
+        for (i, chunk) in chunks.chunks.iter().enumerate() {
+            let mut unload = true;
+            for (_player, position, _connection) in players.iter() {
+                if position.x as i64 / 16 == chunk.x || position.z as i64 / 16 == chunk.y {
+                    unload = false;
+                }
+
+                if unload {
+                    to_unload.push(i);
+                }
+            }
+        }
+
+        let mut connections = Vec::new();
+        
+        for i in to_unload {
+            let chunk = chunks.chunks.get(i).unwrap();
+
+            for (_player, _position, connection) in players.iter() {
+                sender.send_to(Packet::UnloadChunk { x: chunk.x, y: chunk.y }, &connection.peer).unwrap();
+                connections.push(connection);
+            }
+
+            chunks.chunks.swap_remove(i);
+        }
+
+        for (_player, position, _connection) in players.iter() {
+            if let None = chunks.get_chunk(position.x as i64 / 16, position.z as i64 / 16) {
+                info!("Generating chunk.");
+                let chunk = Chunk::new(position.x as i64 / 16, position.z as i64 / 16);
+
+                for connection in connections.iter() {
+                    sender.send_to(Packet::Chunk { x: chunk.x, y: chunk.y, groups: chunk.compress() }, &connection.peer).unwrap();
+                }
+                info!("Done!");
+
+                chunks.chunks.push(chunk);
+            }
+        }
+
     }
 }

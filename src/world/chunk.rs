@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::assets::Identifier;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +36,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    /// Generate a new chunk at given position.
     pub fn new(x: i64, y: i64) -> Self {
         let blocks: Vec<Block> = (0..4096u16)
             .map(|mut i| {
@@ -47,4 +50,65 @@ impl Chunk {
 
         Self { blocks, x, y }
     }
+
+    /// Compress a chunk in a smaller data structure.
+    pub fn compress(&self) -> Vec<BlockGroup> {
+        let mut groups = Vec::new();
+
+        let mut group = BlockGroup {
+            id: self.blocks.first().unwrap().id.clone(),
+            count: 0
+        };
+
+        for block in self.blocks.iter() {
+            if block.id == group.id {
+                group.count += 1;
+            } else {
+                groups.push(group);
+
+                group = BlockGroup {
+                    id: block.id.clone(),
+                    count: 1,
+                };
+            }
+        }
+
+        groups
+    }
+
+    /// Decomrpess a chunk from a vector of BlockGroups.
+    pub fn decompress(groups: Vec<BlockGroup>, x: i64, y: i64) -> Self {
+        let mut chunk = Self {
+            blocks: Vec::new(),
+            x,
+            y
+        };
+
+        let mut i = 0;
+
+        for group in groups {
+            for _ in 0..group.count {
+                let z = i / (16 * 16);
+                i -= z * 16 * 16;
+                let y = i / 16;
+                let x = i % 16;
+
+                let block = Block::new(x, y, z, Identifier::from_str(&group.id).unwrap(), true);
+
+                chunk.blocks.push(block);
+
+                i += 1;
+            }
+        }
+
+        chunk
+    }
+
+}
+
+/// Data structure used to represent a compressed chunk.
+#[derive(Debug, Clone)]
+pub struct BlockGroup {
+    pub id: String,
+    pub count: u32,
 }

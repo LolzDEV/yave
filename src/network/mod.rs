@@ -5,6 +5,8 @@ use std::io::{Cursor, ErrorKind, Read, Write};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 
+use crate::world::chunk::BlockGroup;
+
 #[derive(Debug, Clone)]
 pub enum Packet {
     /// Connection packet. This is sent by the client to the server when a connection is enstablished.
@@ -26,6 +28,10 @@ pub enum Packet {
     },
     /// Online player list. Sent by the server to the client when a new client connects.
     OnlinePlayers { players: Vec<OnlinePlayer> },
+    /// Unload chunk. Sent by the server to the client when a chunk is unloaded.
+    UnloadChunk { x: i64, y: i64},
+    /// Chunk. Sent by the server to the client when a new chunk is loaded.
+    Chunk { x: i64, y: i64, groups: Vec<BlockGroup> }
 }
 
 /// Structure used in the OnlinePlayers packet to store information about players.
@@ -83,6 +89,22 @@ impl Packet {
                     bytes.write_f32::<BigEndian>(player.z)?;
                 }
             }
+            Packet::UnloadChunk { x, y } => {
+                bytes.write_u8(5)?;
+                bytes.write_i64::<BigEndian>(*x)?;
+                bytes.write_i64::<BigEndian>(*y)?;
+            },
+            Packet::Chunk { x, y, groups } => {
+                bytes.write_u8(6)?;
+                bytes.write_i64::<BigEndian>(*x)?;
+                bytes.write_i64::<BigEndian>(*y)?;
+                bytes.write_u64::<BigEndian>(groups.len() as u64)?;
+                for group in groups {
+                    bytes.write_u64::<BigEndian>(group.id.len() as u64)?;
+                    bytes.write_all(group.id.as_bytes())?;
+                    bytes.write_u32::<BigEndian>(group.count)?;
+                }
+            },
         }
 
         Ok(bytes)
@@ -145,6 +167,31 @@ impl Packet {
                 }
 
                 Ok(Self::OnlinePlayers { players })
+            }
+            5 => {
+                Ok(Self::UnloadChunk { x: cursor.read_i64::<BigEndian>()?, y: cursor.read_i64::<BigEndian>()? })
+            }
+            6 => {
+                let x = cursor.read_i64::<BigEndian>()?;
+                let y = cursor.read_i64::<BigEndian>()?;
+                let groups_size = cursor.read_u64::<BigEndian>()?;
+
+                let mut groups = Vec::new();
+
+                for _ in 0..groups_size {
+                    let id_len = cursor.read_u64::<BigEndian>()?;
+
+                    let mut buf = vec![0u8; id_len as usize];
+                    cursor.read_exact(&mut buf)?;
+
+                    let id = String::from_utf8(buf).unwrap_or_else(|_| String::from("Invalid"));
+
+                    let count = cursor.read_u32::<BigEndian>()?;
+
+                    groups.push(BlockGroup { id, count });
+                }
+
+                Ok(Self::Chunk { x, y, groups })
             }
             _ => Err(io::Error::new(
                 ErrorKind::InvalidData,
