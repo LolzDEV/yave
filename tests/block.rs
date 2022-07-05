@@ -13,7 +13,7 @@ pub fn voxel_vertex() {
 
 #[test]
 pub fn block_encoding() {
-    let block = Block::new(4, 2, 7, Identifier::new("base", "grass"));
+    let block = Block::new(4, 2, 7, Identifier::new("base", "grass"), true);
 
     assert_eq!(block.x(), 4);
     assert_eq!(block.y(), 2);
