@@ -32,14 +32,16 @@ async fn main() -> Result<(), OsError> {
 
     info!("Game starting");
 
-    if args.len() < 2 {
-        tokio::spawn(async move { yave::server::game::Game::run(port).unwrap() });
-    } else {
-        addr = args.get(1).unwrap().clone();
-    }
-
     if !dedicated {
+        if args.len() < 2 {
+            tokio::spawn(async move { yave::server::game::Game::run(port).unwrap() });
+        } else {
+            addr = args.get(1).unwrap().clone();
+        }
+
         yave::client::game::Game::run(addr, username).await?;
+    } else {
+        yave::server::game::Game::run(port).unwrap()
     }
 
     Ok(())

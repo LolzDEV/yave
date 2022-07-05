@@ -18,3 +18,19 @@ pub struct KeyboardEvent {
 pub struct MouseMotion {
     pub delta: (f64, f64),
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Direction {
+    /// Negative Z
+    North,
+    /// Positive Z
+    South,
+    /// Positive X
+    East,
+    /// Negative X
+    West,
+    /// Positive Y
+    Top,
+    /// Negative Y
+    Bottom,
+}

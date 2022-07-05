@@ -11,7 +11,7 @@ use crate::network::{split_socket, SocketSender};
 use crate::world::chunk::Chunk;
 use crate::{DeltaTime, KeyboardEvent, MouseMotion};
 use bevy_ecs::event::{EventReader, Events};
-use bevy_ecs::prelude::{Commands, Query, ResMut, Schedule, SystemStage};
+use bevy_ecs::prelude::{Commands, Entity, Query, ResMut, Schedule, SystemStage, Without};
 use bevy_ecs::schedule::Stage;
 use bevy_ecs::system::Res;
 use bevy_ecs::world::World;
@@ -24,6 +24,8 @@ use winit::error::OsError;
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
+
+use super::chunk::ChunkIndices;
 
 pub struct Game;
 
@@ -68,7 +70,8 @@ impl Game {
                 .with_system(Game::update)
                 .with_system(Game::handle_keyboard)
                 .with_system(Game::handle_mouse)
-                .with_system(Game::handle_packets),
+                .with_system(Game::handle_packets)
+                .with_system(Game::update_chunks),
         );
         main_schedule.add_stage(
             "render_loop",
@@ -209,6 +212,8 @@ impl Game {
         commands.insert_resource(CameraController::new(2., 0.5));
 
         commands.insert_resource(PlayerController::new(2., 0.5));
+
+        commands.insert_resource(ChunkIndices::new(&mut renderer));
     }
 
     pub fn update(
@@ -268,6 +273,7 @@ impl Game {
         mut renderer: ResMut<Renderer>,
         assets: Res<AssetManager>,
         mut players: Query<(&Player, &mut TransformBundle)>,
+        chunks: Query<(Entity, &Chunk)>,
     ) {
         for event in events.iter() {
             match &event.packet {
@@ -299,8 +305,41 @@ impl Game {
                         }
                     }
                 }
+                Packet::Chunk { x, y, groups } => {
+                    let chunk = Chunk::decompress(groups, *x, *y);
+
+                    commands.spawn().insert(chunk);
+                    info!("Got chunk");
+                }
+                Packet::UnloadChunk { x, y } => {
+                    for (entity, chunk) in chunks.iter() {
+                        if chunk.x == *x && chunk.y == *y {
+                            commands.entity(entity).despawn();
+                        }
+                    }
+                }
                 _ => (),
             }
+        }
+    }
+
+    pub fn update_chunks(
+        mut commands: Commands,
+        no_mesh: Query<(Entity, &Chunk), Without<ChunkMesh>>,
+        mut renderer: ResMut<Renderer>,
+        assets: Res<AssetManager>,
+    ) {
+        for (entity, chunk) in no_mesh.iter() {
+            let mesh = ChunkMesh::build(&mut renderer, &chunk);
+
+            commands
+                .entity(entity)
+                .insert(mesh)
+                .insert(TransformBundle::new(
+                    ((chunk.x * 16) as f32, 0., (chunk.y * 16) as f32),
+                    &mut renderer,
+                    &assets,
+                ));
         }
     }
 
@@ -324,11 +363,11 @@ impl Game {
 
     pub fn handle_mouse(
         mut events: EventReader<MouseMotion>,
-        //mut camera_controller: ResMut<CameraController>,
+        mut camera_controller: ResMut<CameraController>,
         mut player_controller: ResMut<PlayerController>,
     ) {
         for event in events.iter() {
-            //camera_controller.process_mouse(event.delta.0, event.delta.1);
+            camera_controller.process_mouse(event.delta.0, event.delta.1);
             player_controller.process_mouse(event.delta.0, event.delta.1);
         }
     }
@@ -338,6 +377,8 @@ impl Game {
         assets: Res<AssetManager>,
         camera_bundle: Res<CameraBundle>,
         players: Query<(&Player, &TransformBundle)>,
+        chunks: Query<(&Chunk, &ChunkMesh, &TransformBundle)>,
+        chunk_indices: Res<ChunkIndices>,
     ) {
         let output = renderer.surface.get_current_texture();
 
@@ -410,6 +451,21 @@ impl Game {
                         &[],
                     );
                     render_pass.draw_indexed(0..3, 0, 0..1);
+                }
+
+                render_pass.set_index_buffer(
+                    renderer.get_buffer(chunk_indices.buffer).slice(..),
+                    IndexFormat::Uint32,
+                );
+
+                for (_chunk, mesh, transform) in chunks.iter() {
+                    render_pass.set_bind_group(
+                        1,
+                        renderer.get_bind_group(transform.bind_group),
+                        &[],
+                    );
+                    render_pass.set_vertex_buffer(0, renderer.get_buffer(mesh.buffer).slice(..));
+                    render_pass.draw_indexed(0..chunk_indices.len as u32, 0, 0..1);
                 }
 
                 drop(render_pass);

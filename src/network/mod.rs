@@ -29,9 +29,13 @@ pub enum Packet {
     /// Online player list. Sent by the server to the client when a new client connects.
     OnlinePlayers { players: Vec<OnlinePlayer> },
     /// Unload chunk. Sent by the server to the client when a chunk is unloaded.
-    UnloadChunk { x: i64, y: i64},
+    UnloadChunk { x: i64, y: i64 },
     /// Chunk. Sent by the server to the client when a new chunk is loaded.
-    Chunk { x: i64, y: i64, groups: Vec<BlockGroup> }
+    Chunk {
+        x: i64,
+        y: i64,
+        groups: Vec<BlockGroup>,
+    },
 }
 
 /// Structure used in the OnlinePlayers packet to store information about players.
@@ -93,7 +97,7 @@ impl Packet {
                 bytes.write_u8(5)?;
                 bytes.write_i64::<BigEndian>(*x)?;
                 bytes.write_i64::<BigEndian>(*y)?;
-            },
+            }
             Packet::Chunk { x, y, groups } => {
                 bytes.write_u8(6)?;
                 bytes.write_i64::<BigEndian>(*x)?;
@@ -104,7 +108,7 @@ impl Packet {
                     bytes.write_all(group.id.as_bytes())?;
                     bytes.write_u32::<BigEndian>(group.count)?;
                 }
-            },
+            }
         }
 
         Ok(bytes)
@@ -168,9 +172,10 @@ impl Packet {
 
                 Ok(Self::OnlinePlayers { players })
             }
-            5 => {
-                Ok(Self::UnloadChunk { x: cursor.read_i64::<BigEndian>()?, y: cursor.read_i64::<BigEndian>()? })
-            }
+            5 => Ok(Self::UnloadChunk {
+                x: cursor.read_i64::<BigEndian>()?,
+                y: cursor.read_i64::<BigEndian>()?,
+            }),
             6 => {
                 let x = cursor.read_i64::<BigEndian>()?;
                 let y = cursor.read_i64::<BigEndian>()?;

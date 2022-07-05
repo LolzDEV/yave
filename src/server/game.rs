@@ -1,7 +1,7 @@
 use crate::network::{split_socket, OnlinePlayer, Packet, SocketSender};
 use crate::server::{ClientEvent, Connection, Player, PlayerName, Position};
-use crate::world::Chunks;
 use crate::world::chunk::Chunk;
+use crate::world::Chunks;
 use bevy_ecs::event::Events;
 use bevy_ecs::prelude::{Commands, EventReader, Query, Schedule, SystemStage, World};
 use bevy_ecs::schedule::Stage;
@@ -37,7 +37,9 @@ impl Game {
 
         main_schedule.add_stage(
             "main_loop",
-            SystemStage::parallel().with_system(Game::handle_packets).with_system(Game::update_chunks),
+            SystemStage::parallel()
+                .with_system(Game::handle_packets)
+                .with_system(Game::update_chunks),
         );
 
         info!("Starting server on port 25000");
@@ -169,7 +171,11 @@ impl Game {
         }
     }
 
-    pub fn update_chunks(mut chunks: ResMut<Chunks>, players: Query<(&Player, &Position, &Connection)>, mut sender: ResMut<SocketSender>) {
+    pub fn update_chunks(
+        mut chunks: ResMut<Chunks>,
+        players: Query<(&Player, &Position, &Connection)>,
+        mut sender: ResMut<SocketSender>,
+    ) {
         let mut to_unload = vec![];
 
         for (i, chunk) in chunks.chunks.iter().enumerate() {
@@ -186,16 +192,27 @@ impl Game {
         }
 
         let mut connections = Vec::new();
-        
+
+        for (_player, _position, connection) in players.iter() {
+            connections.push(connection);
+        }
+
         for i in to_unload {
             let chunk = chunks.chunks.get(i).unwrap();
 
-            for (_player, _position, connection) in players.iter() {
-                sender.send_to(Packet::UnloadChunk { x: chunk.x, y: chunk.y }, &connection.peer).unwrap();
-                connections.push(connection);
+            for connection in connections.iter() {
+                sender
+                    .send_to(
+                        Packet::UnloadChunk {
+                            x: chunk.x,
+                            y: chunk.y,
+                        },
+                        &connection.peer,
+                    )
+                    .unwrap();
             }
 
-            chunks.chunks.swap_remove(i);
+            chunks.chunks.remove(i);
         }
 
         for (_player, position, _connection) in players.iter() {
@@ -204,13 +221,21 @@ impl Game {
                 let chunk = Chunk::new(position.x as i64 / 16, position.z as i64 / 16);
 
                 for connection in connections.iter() {
-                    sender.send_to(Packet::Chunk { x: chunk.x, y: chunk.y, groups: chunk.compress() }, &connection.peer).unwrap();
+                    sender
+                        .send_to(
+                            Packet::Chunk {
+                                x: chunk.x,
+                                y: chunk.y,
+                                groups: chunk.compress(),
+                            },
+                            &connection.peer,
+                        )
+                        .unwrap();
                 }
                 info!("Done!");
 
                 chunks.chunks.push(chunk);
             }
         }
-
     }
 }

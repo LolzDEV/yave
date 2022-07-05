@@ -1,5 +1,7 @@
 use serde_derive::Deserialize;
 
+use crate::Direction;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, PartialEq)]
 pub struct VoxelVertex {
@@ -57,4 +59,64 @@ pub struct BlockTextureDescription {
     pub west: String,
     pub east: String,
     pub south: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockFace {
+    pub vertices: [VoxelVertex; 4],
+}
+
+impl BlockFace {
+    pub fn new(direction: Direction, x: u32, y: u32, z: u32) -> Self {
+        match direction {
+            Direction::North => Self {
+                vertices: [
+                    VoxelVertex::new(0 + x, 0 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 0 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 1 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 1 + y, 0 + z, 0, 0),
+                ],
+            },
+            Direction::South => Self {
+                vertices: [
+                    VoxelVertex::new(0 + x, 0 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 0 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 1 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 1 + y, 1 + z, 0, 0),
+                ],
+            },
+            Direction::East => Self {
+                vertices: [
+                    VoxelVertex::new(1 + x, 0 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 0 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 1 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 1 + y, 1 + z, 0, 0),
+                ],
+            },
+            Direction::West => Self {
+                vertices: [
+                    VoxelVertex::new(0 + x, 0 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 0 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 1 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 1 + y, 1 + z, 0, 0),
+                ],
+            },
+            Direction::Top => Self {
+                vertices: [
+                    VoxelVertex::new(0 + x, 1 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 1 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 1 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 1 + y, 1 + z, 0, 0),
+                ],
+            },
+            Direction::Bottom => Self {
+                vertices: [
+                    VoxelVertex::new(0 + x, 0 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 0 + y, 1 + z, 0, 0),
+                    VoxelVertex::new(1 + x, 0 + y, 0 + z, 0, 0),
+                    VoxelVertex::new(0 + x, 0 + y, 0 + z, 0, 0),
+                ],
+            },
+        }
+    }
 }
