@@ -30,7 +30,7 @@ use winit::window::{Window, WindowBuilder};
 pub struct Game;
 
 impl Game {
-    pub async fn run(addr: String) -> Result<(), OsError> {
+    pub async fn run(addr: String, username: String) -> Result<(), OsError> {
         Chunk::new(0, 0);
 
         let event_loop = EventLoop::new();
@@ -108,12 +108,10 @@ impl Game {
 
         sender
             .send(
-                Packet::Connection {
-                    user: "Lolz".to_string(),
-                }
-                .encode()
-                .unwrap()
-                .as_slice(),
+                Packet::Connection { user: username }
+                    .encode()
+                    .unwrap()
+                    .as_slice(),
             )
             .await
             .unwrap();
@@ -337,6 +335,12 @@ impl Game {
     ) {
         for event in events.iter() {
             match &event.packet {
+                Packet::Connection { user } => {
+                    commands
+                        .spawn()
+                        .insert(Player { name: user.clone() })
+                        .insert(TransformBundle::new((0., 0., 10.), &mut renderer, &assets));
+                }
                 Packet::OnlinePlayers { players } => {
                     for player in players {
                         commands

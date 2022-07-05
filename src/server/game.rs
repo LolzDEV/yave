@@ -16,7 +16,7 @@ use std::{io, thread};
 pub struct Game;
 
 impl Game {
-    pub fn run() -> io::Result<()> {
+    pub fn run(port: String) -> io::Result<()> {
         let world = Arc::new(Mutex::new(World::new()));
 
         world
@@ -38,7 +38,7 @@ impl Game {
 
         info!("Starting server on port 25000");
 
-        let socket = UdpSocket::bind("0.0.0.0:25000")?;
+        let socket = UdpSocket::bind(format!("0.0.0.0:{port}"))?;
 
         let (sender, mut receiver) = split_socket(socket);
 
