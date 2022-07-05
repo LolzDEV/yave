@@ -5,7 +5,7 @@ use winit::event::KeyboardInput;
 
 pub mod assets;
 pub mod client;
-mod network;
+pub mod network;
 pub mod server;
 pub mod world;
 
