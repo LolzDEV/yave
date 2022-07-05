@@ -3,7 +3,7 @@ use crate::server::{ClientEvent, Connection, Player, PlayerName, Position};
 use crate::world::chunk::Chunk;
 use crate::world::Chunks;
 use bevy_ecs::event::Events;
-use bevy_ecs::prelude::{Commands, EventReader, Query, Schedule, SystemStage, World};
+use bevy_ecs::prelude::{Commands, EventReader, Query, Res, Schedule, SystemStage, World};
 use bevy_ecs::schedule::Stage;
 use bevy_ecs::system::ResMut;
 use log::info;
@@ -95,6 +95,7 @@ impl Game {
         mut events: EventReader<ClientEvent>,
         mut players: Query<(&Player, &mut Position, &Connection)>,
         mut sender: ResMut<SocketSender>,
+        chunks: Res<Chunks>,
     ) {
         for event in events.iter() {
             match &event.packet {
@@ -133,6 +134,19 @@ impl Game {
                             z: 10.,
                         })
                         .insert(Connection { peer: event.peer });
+
+                    for chunk in chunks.chunks.iter() {
+                        sender
+                            .send_to(
+                                Packet::Chunk {
+                                    x: chunk.x,
+                                    y: chunk.y,
+                                    groups: chunk.compress(),
+                                },
+                                &event.peer,
+                            )
+                            .unwrap();
+                    }
 
                     info!("Player {user} connected.");
                 }
