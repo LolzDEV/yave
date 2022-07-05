@@ -175,7 +175,7 @@ impl Game {
                             }
                             WindowEvent::Focused(is) => {
                                 let window = world.get_resource_mut::<Window>().unwrap();
-                                window.set_cursor_grab(is).expect("Failed to grub cursor");
+                                window.set_cursor_grab(is);
                                 window.set_cursor_visible(!is);
                             }
                             _ => (),
@@ -337,13 +337,19 @@ impl Game {
     ) {
         for event in events.iter() {
             match &event.packet {
-                Packet::Connection { user } => {
-                    info!("Player {user} connected.");
-
-                    commands
-                        .spawn()
-                        .insert(Player { name: user.clone() })
-                        .insert(TransformBundle::new((0., 0., 10.), &mut renderer, &assets));
+                Packet::OnlinePlayers { players } => {
+                    for player in players {
+                        commands
+                            .spawn()
+                            .insert(Player {
+                                name: player.name.clone(),
+                            })
+                            .insert(TransformBundle::new(
+                                (player.x, player.y, player.z),
+                                &mut renderer,
+                                &assets,
+                            ));
+                    }
                 }
                 Packet::PlayerPosition { x, y, z, name } => {
                     for (player, mut transform_bundle) in players.iter_mut() {

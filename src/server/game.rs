@@ -1,4 +1,4 @@
-use crate::network::Packet;
+use crate::network::{OnlinePlayer, Packet};
 use crate::server::{
     split_socket, ClientEvent, Connection, Player, PlayerName, Position, SocketSender,
 };
@@ -87,26 +87,34 @@ impl Game {
         for event in events.iter() {
             match &event.packet {
                 Packet::Connection { user } => {
-                    for (player, _position, connection) in players.iter() {
+                    let mut online_players = Vec::new();
+                    for (player, position, connection) in players.iter() {
                         block_on(sender.send_to(
                             event.packet.clone().encode().unwrap().as_slice(),
                             &connection.peer,
                         ))
                         .unwrap();
 
-                        block_on(
-                            sender.send_to(
-                                Packet::Connection {
-                                    user: player.name.name.clone(),
-                                }
-                                .encode()
-                                .unwrap()
-                                .as_slice(),
-                                &event.peer,
-                            ),
-                        )
-                        .unwrap();
+                        online_players.push(OnlinePlayer {
+                            name: player.name.name.clone(),
+                            x: position.x as f32,
+                            y: position.y as f32,
+                            z: position.z as f32,
+                        });
                     }
+
+                    block_on(
+                        sender.send_to(
+                            Packet::OnlinePlayers {
+                                players: online_players,
+                            }
+                            .encode()
+                            .unwrap()
+                            .as_slice(),
+                            &event.peer,
+                        ),
+                    )
+                    .unwrap();
 
                     commands
                         .spawn()

@@ -21,6 +21,8 @@ pub enum Packet {
         z: f64,
         name: String,
     },
+    /// Online player list. Sent by the server to the client when a new client connects.
+    OnlinePlayers { players: Vec<OnlinePlayer> },
 }
 
 impl Packet {
@@ -55,6 +57,18 @@ impl Packet {
                 bytes.write_f64::<BigEndian>(*z)?;
                 bytes.write_u64::<BigEndian>(name.len() as u64)?;
                 bytes.write_all(name.as_bytes())?;
+            }
+            Packet::OnlinePlayers { players } => {
+                bytes.write_u8(4)?;
+                bytes.write_u64::<BigEndian>(players.len() as u64)?;
+                for player in players {
+                    bytes.write_u64::<BigEndian>(player.name.len() as u64)?;
+                    bytes.write_all(player.name.as_bytes())?;
+
+                    bytes.write_f32::<BigEndian>(player.x)?;
+                    bytes.write_f32::<BigEndian>(player.y)?;
+                    bytes.write_f32::<BigEndian>(player.z)?;
+                }
             }
         }
 
@@ -99,10 +113,37 @@ impl Packet {
 
                 Ok(Self::PlayerPosition { x, y, z, name })
             }
+            4 => {
+                let len = cursor.read_u64::<BigEndian>()?;
+                let mut players = Vec::with_capacity(len as usize);
+                for _ in 0..len {
+                    let name_len = cursor.read_u64::<BigEndian>()?;
+
+                    let mut buf = vec![0u8; name_len as usize];
+                    cursor.read_exact(&mut buf)?;
+
+                    let name = String::from_utf8(buf).unwrap_or_else(|_| String::from("Invalid"));
+                    let x = cursor.read_f32::<BigEndian>()?;
+                    let y = cursor.read_f32::<BigEndian>()?;
+                    let z = cursor.read_f32::<BigEndian>()?;
+
+                    players.push(OnlinePlayer { name, x, y, z });
+                }
+
+                Ok(Self::OnlinePlayers { players })
+            }
             _ => Err(io::Error::new(
                 ErrorKind::InvalidData,
                 "Trying to decode an invalid packet",
             )),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePlayer {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
